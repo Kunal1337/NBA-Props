@@ -16,7 +16,12 @@ export default function PropsTable({ onPlayerClick }) {
   const fetchProps = useCallback(async () => {
     try {
       const { data } = await api.get('/api/props');
-      setProps(data);
+      // Backend returns { loading: true, data: [] } while cache is warming
+      if (data && data.loading) {
+        setTimeout(fetchProps, 5000);
+        return;
+      }
+      setProps(Array.isArray(data) ? data : data.data || []);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch (err) {
       console.error('Failed to fetch props:', err);

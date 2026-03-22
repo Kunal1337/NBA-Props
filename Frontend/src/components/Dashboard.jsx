@@ -8,16 +8,26 @@ export default function Dashboard({ onPlayerClick }) {
   const [minRate, setMinRate] = useState(60);
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+    let retryTimer;
+    async function fetchData() {
       try {
         const { data } = await api.get('/api/props');
-        setProps(data);
+        if (cancelled) return;
+        // Backend returns { loading: true, data: [] } while cache is warming
+        if (data && data.loading) {
+          retryTimer = setTimeout(fetchData, 5000);
+          return;
+        }
+        setProps(Array.isArray(data) ? data : data.data || []);
       } catch (err) {
         console.error('Dashboard fetch error:', err);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    })();
+    }
+    fetchData();
+    return () => { cancelled = true; clearTimeout(retryTimer); };
   }, []);
 
   const statTypes = ['All', ...new Set(props.map((p) => p.statType))];
