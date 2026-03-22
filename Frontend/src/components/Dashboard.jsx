@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import api from '../api';
 
 export default function Dashboard({ onPlayerClick }) {
   const [props, setProps] = useState([]);
@@ -10,7 +10,7 @@ export default function Dashboard({ onPlayerClick }) {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await axios.get('/api/props');
+        const { data } = await api.get('/api/props');
         setProps(data);
       } catch (err) {
         console.error('Dashboard fetch error:', err);

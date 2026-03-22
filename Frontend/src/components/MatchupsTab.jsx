@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import api from '../api';
 
 const POS_COLS = ['vsG', 'vsF', 'vsC'];
 const POS_LABELS = { vsG: 'Guards', vsF: 'Forwards', vsC: 'Centers' };
@@ -18,7 +18,7 @@ export default function MatchupsTab() {
   useEffect(() => {
     (async () => {
       try {
-        const { data } = await axios.get('/api/matchups');
+        const { data } = await api.get('/api/matchups');
         setRankings(data);
       } catch (err) {
         setError('Failed to load matchup data.');

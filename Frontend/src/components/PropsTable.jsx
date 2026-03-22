@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
+import api from '../api';
 import { io } from 'socket.io-client';
 import FilterPanel, { DEFAULT_FILTERS } from './FilterPanel';
 import { computeWeightedLockRate } from '../utils/statHelpers';
@@ -15,7 +15,7 @@ export default function PropsTable({ onPlayerClick }) {
 
   const fetchProps = useCallback(async () => {
     try {
-      const { data } = await axios.get('/api/props');
+      const { data } = await api.get('/api/props');
       setProps(data);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch (err) {
@@ -28,7 +28,7 @@ export default function PropsTable({ onPlayerClick }) {
   useEffect(() => {
     fetchProps();
     const interval = setInterval(fetchProps, POLL_INTERVAL);
-    const socket = io();
+    const socket = io(import.meta.env.VITE_API_URL || '');
     socket.on('props_update', (data) => {
       setProps(data);
       setLastUpdated(new Date().toLocaleTimeString());
