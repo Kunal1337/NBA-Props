@@ -1,5 +1,18 @@
-*
-!Backend/
-!Frontend/
-!.gitignore
-!*.md
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
