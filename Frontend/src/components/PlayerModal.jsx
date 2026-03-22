@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import axios from 'axios';
+import api from '../api';
 import PerformanceChart from './PerformanceChart';
 import { resolveStatValue, mapStatType, generateInsights } from '../utils/statHelpers';
 
@@ -29,7 +29,7 @@ export default function PlayerModal({ playerName, propData, onClose }) {
     (async () => {
       try {
         const teamParam = propData?.playerTeam || propData?.homeTeam || '';
-        const { data } = await axios.get(
+        const { data } = await api.get(
           `/api/player/${encodeURIComponent(playerName)}`,
           { params: teamParam ? { team: teamParam } : {} },
         );
