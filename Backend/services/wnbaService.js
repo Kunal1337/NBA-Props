@@ -30,8 +30,13 @@ function storeResult(name, result) {
   return logs;
 }
 
-const BATCH_CHUNK_SIZE = 15;
-const BATCH_TIMEOUT_MS = 90_000;
+// Chunk size is intentionally large — the dominant cost per process is the
+// one-time numpy/pandas/nba_api import (confirmed 25s+ alone on Render's
+// free tier), not the per-player work, so fewer/bigger chunks beat more/
+// smaller ones. The timeout budgets ~90s for that cold start plus ~40
+// players' worth of sequential network calls.
+const BATCH_CHUNK_SIZE = 40;
+const BATCH_TIMEOUT_MS = 150_000;
 
 /**
  * Pre-fetch game logs for many players via as few Python process spawns

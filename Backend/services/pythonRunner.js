@@ -5,7 +5,10 @@ const SCRIPT_PATH = path.join(__dirname, '..', 'python', 'wnba_stats.py');
 // Windows dev machines typically only have `python` on PATH; Linux hosts
 // (Render, etc.) typically only have `python3`.
 const PYTHON_BIN = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
-const TIMEOUT_MS = 25000;
+// Cold Python process startup (importing numpy/pandas/nba_api) alone can
+// exceed 25s on a heavily CPU-throttled host (e.g. Render's free tier,
+// 0.1 CPU) before any actual work happens — confirmed in production logs.
+const TIMEOUT_MS = 60000;
 
 /**
  * Run Backend/python/wnba_stats.py with the given args and parse its
