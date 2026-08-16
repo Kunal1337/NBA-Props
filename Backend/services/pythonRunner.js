@@ -2,7 +2,9 @@ const { execFile } = require('child_process');
 const path = require('path');
 
 const SCRIPT_PATH = path.join(__dirname, '..', 'python', 'wnba_stats.py');
-const PYTHON_BIN = process.env.PYTHON_BIN || 'python';
+// Windows dev machines typically only have `python` on PATH; Linux hosts
+// (Render, etc.) typically only have `python3`.
+const PYTHON_BIN = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
 const TIMEOUT_MS = 25000;
 
 /**
