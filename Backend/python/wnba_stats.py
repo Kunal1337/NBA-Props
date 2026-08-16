@@ -10,7 +10,16 @@ real opponent-points-allowed data. See NBA-Props-handoff.md for context.
 
 Commands:
     python wnba_stats.py game-log "<player name>"
+    python wnba_stats.py game-logs-batch          (reads a JSON array of
+                                                     player names on stdin)
     python wnba_stats.py opponent-stats
+
+game-logs-batch exists because a fresh Python process pays nba_api's
+numpy/pandas import cost on every invocation — cheap on a normal machine,
+but expensive on a resource-constrained host (e.g. Render's free tier,
+0.1 CPU). Spawning one process per player timed out there under load.
+Batching many players into a single process pays that cost once instead
+of once per player.
 """
 
 import sys
@@ -27,6 +36,9 @@ from nba_api.stats.endpoints import (
 from nba_api.stats.library.parameters import LeagueID, WnbaSeason
 
 TIMEOUT = 20
+
+# Populated lazily, at most once per process, by _find_player_live().
+_live_roster_cache = None
 
 
 def _emit(obj):
@@ -53,27 +65,32 @@ def _find_player_live(player_name):
     (e.g. recent draft picks — the static bundle ships with the package
     and can lag behind the actual current roster). Queries stats.nba.com
     directly for the live current-season roster instead of a snapshot.
+    Cached per-process so a batch of many missing players only pays for
+    this fetch once.
     """
-    try:
-        resp = commonallplayers.CommonAllPlayers(
-            is_only_current_season=1, league_id=LeagueID.wnba, season=WnbaSeason.default, timeout=TIMEOUT,
-        )
-        rows = resp.get_normalized_dict().get("CommonAllPlayers", [])
-    except Exception:
-        return None
+    global _live_roster_cache
+    if _live_roster_cache is None:
+        try:
+            resp = commonallplayers.CommonAllPlayers(
+                is_only_current_season=1, league_id=LeagueID.wnba, season=WnbaSeason.default, timeout=TIMEOUT,
+            )
+            _live_roster_cache = resp.get_normalized_dict().get("CommonAllPlayers", [])
+        except Exception:
+            _live_roster_cache = []
     name_lower = player_name.strip().lower()
-    for r in rows:
+    for r in _live_roster_cache:
         if r.get("DISPLAY_FIRST_LAST", "").strip().lower() == name_lower:
             return {"id": r["PERSON_ID"], "full_name": r["DISPLAY_FIRST_LAST"]}
     return None
 
 
-def cmd_game_log(player_name):
+def _resolve_player(player_name):
     matches = static_players.find_wnba_players_by_full_name(player_name)
-    player = matches[0] if matches else _find_player_live(player_name)
-    if not player:
-        _fail(f"No WNBA player found matching '{player_name}'")
+    return matches[0] if matches else _find_player_live(player_name)
 
+
+def _build_game_log(player):
+    """Given a resolved {id, full_name} player, fetch position + game log."""
     position = None
     try:
         info = commonplayerinfo.CommonPlayerInfo(
@@ -114,14 +131,41 @@ def cmd_game_log(player_name):
             "position": position,
         })
 
-    _emit({
+    return {
         "player": player["full_name"],
         "personId": player["id"],
         "teamAbbr": team_abbr,
         "position": position,
         "games": games,
-    })
+    }
 
+
+def cmd_game_log(player_name):
+    player = _resolve_player(player_name)
+    if not player:
+        _fail(f"No WNBA player found matching '{player_name}'")
+    _emit(_build_game_log(player))
+
+
+def cmd_game_logs_batch():
+    try:
+        names = json.loads(sys.stdin.read())
+    except Exception as e:
+        _fail(f"game-logs-batch expects a JSON array of names on stdin: {e}")
+    if not isinstance(names, list):
+        _fail("game-logs-batch expects a JSON array of names on stdin")
+
+    result = {}
+    for name in names:
+        try:
+            player = _resolve_player(name)
+            if not player:
+                result[name] = {"error": f"No WNBA player found matching '{name}'"}
+                continue
+            result[name] = _build_game_log(player)
+        except Exception as e:
+            result[name] = {"error": f"{type(e).__name__}: {e}"}
+    _emit(result)
 
 
 # 2026 WNBA expansion teams not yet present in nba_api's bundled static
@@ -169,13 +213,15 @@ def cmd_opponent_stats():
 
 def main():
     if len(sys.argv) < 2:
-        _fail("usage: wnba_stats.py <game-log|opponent-stats> [args]")
+        _fail("usage: wnba_stats.py <game-log|game-logs-batch|opponent-stats> [args]")
     command = sys.argv[1]
     try:
         if command == "game-log":
             if len(sys.argv) < 3:
                 _fail("game-log requires a player name")
             cmd_game_log(sys.argv[2])
+        elif command == "game-logs-batch":
+            cmd_game_logs_batch()
         elif command == "opponent-stats":
             cmd_opponent_stats()
         else:

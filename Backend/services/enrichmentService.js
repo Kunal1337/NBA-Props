@@ -146,6 +146,17 @@ async function refreshEnrichedProps(league = 'nba') {
 
   try {
     const rawProps = await fetchAllProps(league);
+
+    // For leagues backed by a Python subprocess per player (WNBA), fetch
+    // every player's game log in a few batched process spawns up front
+    // instead of one process per player during the concurrent loop below
+    // — see wnbaService.prefetchGameLogs for why.
+    const statsService = statsServiceFor(league);
+    if (typeof statsService.prefetchGameLogs === 'function') {
+      const names = [...new Set(rawProps.map((p) => p.player))];
+      await statsService.prefetchGameLogs(names);
+    }
+
     const enriched = [];
     const BATCH = 5;
 
