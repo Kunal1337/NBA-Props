@@ -5,9 +5,11 @@ import Dashboard from './components/Dashboard';
 import MatchupsTab from './components/MatchupsTab';
 
 const TABS = ['Dashboard', 'Props', 'Matchups'];
+const LEAGUES = ['NBA', 'WNBA'];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('Dashboard');
+  const [league, setLeague] = useState('nba');
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [selectedProp, setSelectedProp] = useState(null);
 
@@ -24,32 +26,51 @@ export default function App() {
           <span style={{ color: 'var(--text-muted)' }}>is</span>{' '}
           <span style={{ color: 'var(--accent)' }}>Guru</span>
         </h1>
-        <nav style={tabBarStyle}>
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                ...tabBtnStyle,
-                color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
-                background: activeTab === tab ? 'var(--accent-glow)' : 'transparent',
-                borderColor: activeTab === tab ? 'var(--accent)' : 'transparent',
-              }}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+          <nav style={tabBarStyle}>
+            {LEAGUES.map((lg) => (
+              <button
+                key={lg}
+                onClick={() => setLeague(lg.toLowerCase())}
+                style={{
+                  ...tabBtnStyle,
+                  color: league === lg.toLowerCase() ? 'var(--text-primary)' : 'var(--text-muted)',
+                  background: league === lg.toLowerCase() ? 'var(--accent-glow)' : 'transparent',
+                  borderColor: league === lg.toLowerCase() ? 'var(--accent)' : 'transparent',
+                }}
+              >
+                {lg}
+              </button>
+            ))}
+          </nav>
+          <nav style={tabBarStyle}>
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  ...tabBtnStyle,
+                  color: activeTab === tab ? 'var(--text-primary)' : 'var(--text-muted)',
+                  background: activeTab === tab ? 'var(--accent-glow)' : 'transparent',
+                  borderColor: activeTab === tab ? 'var(--accent)' : 'transparent',
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
+        </div>
       </div>
 
       <div style={{ marginTop: 8 }}>
-        {activeTab === 'Dashboard' && <Dashboard onPlayerClick={handlePlayerClick} />}
-        {activeTab === 'Props' && <PropsTable onPlayerClick={handlePlayerClick} />}
-        {activeTab === 'Matchups' && <MatchupsTab />}
+        {activeTab === 'Dashboard' && <Dashboard league={league} onPlayerClick={handlePlayerClick} />}
+        {activeTab === 'Props' && <PropsTable league={league} onPlayerClick={handlePlayerClick} />}
+        {activeTab === 'Matchups' && <MatchupsTab league={league} />}
       </div>
 
       {selectedPlayer && (
         <PlayerModal
+          league={league}
           playerName={selectedPlayer}
           propData={selectedProp}
           onClose={() => { setSelectedPlayer(null); setSelectedProp(null); }}

@@ -242,6 +242,7 @@ async function getPlayerGameLogs(name, teamHint, teamCandidates) {
         fga: s.fieldGoalsAttempted || 0,
         fta: s.freeThrowsAttempted || 0,
         tpa: s.threePointersAttempted || 0,
+        tpm: s.threePointersMade || 0,
         fouls: s.foulsPersonal || 0,
         date: gInfo.date,
         opp,
@@ -264,7 +265,7 @@ function resolveStatValue(log, statKey) {
     points: 'points', pts: 'points',
     assists: 'assists', ast: 'assists',
     rebounds: 'rebounds', reb: 'rebounds',
-    threes: 'tpa', tpa: 'tpa',
+    threes: 'tpm', tpa: 'tpa', tpm: 'tpm',
   };
   if (statKey.includes('+')) {
     return statKey.split('+').reduce((sum, part) => {

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import api from '../api';
+import { getHeadshotUrl } from '../utils/headshot';
 
-export default function Dashboard({ onPlayerClick }) {
+export default function Dashboard({ league, onPlayerClick }) {
   const [props, setProps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [statFilter, setStatFilter] = useState('All');
@@ -10,9 +11,10 @@ export default function Dashboard({ onPlayerClick }) {
   useEffect(() => {
     let cancelled = false;
     let retryTimer;
+    setLoading(true);
     async function fetchData() {
       try {
-        const { data } = await api.get('/api/props');
+        const { data } = await api.get('/api/props', { params: { league } });
         if (cancelled) return;
         // Backend returns { loading: true, data: [] } while cache is warming
         if (data && data.loading) {
@@ -28,7 +30,7 @@ export default function Dashboard({ onPlayerClick }) {
     }
     fetchData();
     return () => { cancelled = true; clearTimeout(retryTimer); };
-  }, []);
+  }, [league]);
 
   const statTypes = ['All', ...new Set(props.map((p) => p.statType))];
 
@@ -91,7 +93,7 @@ export default function Dashboard({ onPlayerClick }) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
                 {p.personId && (
-                  <img src={`https://cdn.nba.com/headshots/nba/latest/260x190/${p.personId}.png`} alt=""
+                  <img src={getHeadshotUrl(league, p.personId)} alt=""
                     style={{ width: 36, height: 26, borderRadius: 4, objectFit: 'cover', background: 'var(--bg-surface)' }}
                     onError={(e) => { e.target.style.display = 'none'; }} />
                 )}
@@ -132,7 +134,7 @@ export default function Dashboard({ onPlayerClick }) {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   {p.personId && (
-                    <img src={`https://cdn.nba.com/headshots/nba/latest/260x190/${p.personId}.png`} alt=""
+                    <img src={getHeadshotUrl(league, p.personId)} alt=""
                       style={{ width: 32, height: 24, borderRadius: 3, objectFit: 'cover', background: 'var(--bg-surface)' }}
                       onError={(e) => { e.target.style.display = 'none'; }} />
                   )}

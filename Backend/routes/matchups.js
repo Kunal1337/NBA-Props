@@ -1,14 +1,17 @@
 const express = require('express');
 const router = express.Router();
-const { getDefensiveRankings } = require('../services/matchupService');
+const matchupService = require('../services/matchupService');
+const wnbaMatchupService = require('../services/wnbaMatchupService');
 
 /**
- * GET /api/matchups
+ * GET /api/matchups?league=nba|wnba
  * Returns defensive rankings grouped by team and position.
  */
-router.get('/matchups', async (_req, res) => {
+router.get('/matchups', async (req, res) => {
   try {
-    const rankings = await getDefensiveRankings();
+    const league = req.query.league === 'wnba' ? 'wnba' : 'nba';
+    const service = league === 'wnba' ? wnbaMatchupService : matchupService;
+    const rankings = await service.getDefensiveRankings();
     res.json(rankings);
   } catch (err) {
     console.error('GET /api/matchups error:', err.message);

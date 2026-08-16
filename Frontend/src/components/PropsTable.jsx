@@ -3,11 +3,12 @@ import api from '../api';
 import { io } from 'socket.io-client';
 import FilterPanel, { DEFAULT_FILTERS } from './FilterPanel';
 import { computeWeightedLockRate } from '../utils/statHelpers';
+import { getHeadshotUrl } from '../utils/headshot';
 import HitRateBar, { HitRateGroup } from './HitRateBar';
 
 const POLL_INTERVAL = 600_000;
 
-export default function PropsTable({ onPlayerClick }) {
+export default function PropsTable({ league, onPlayerClick }) {
   const [props, setProps] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -15,7 +16,7 @@ export default function PropsTable({ onPlayerClick }) {
 
   const fetchProps = useCallback(async () => {
     try {
-      const { data } = await api.get('/api/props');
+      const { data } = await api.get('/api/props', { params: { league } });
       // Backend returns { loading: true, data: [] } while cache is warming
       if (data && data.loading) {
         setTimeout(fetchProps, 5000);
@@ -28,18 +29,20 @@ export default function PropsTable({ onPlayerClick }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [league]);
 
   useEffect(() => {
+    setLoading(true);
     fetchProps();
     const interval = setInterval(fetchProps, POLL_INTERVAL);
     const socket = io(import.meta.env.VITE_API_URL || '');
-    socket.on('props_update', (data) => {
-      setProps(data);
+    socket.on('props_update', (payload) => {
+      if (payload.league !== league) return; // ignore updates for the other league
+      setProps(payload.props);
       setLastUpdated(new Date().toLocaleTimeString());
     });
     return () => { clearInterval(interval); socket.disconnect(); };
-  }, [fetchProps]);
+  }, [fetchProps, league]);
 
   const filtered = props.filter((p) => {
     if (filters.search && !p.player.toLowerCase().includes(filters.search.toLowerCase())) return false;
@@ -90,7 +93,7 @@ export default function PropsTable({ onPlayerClick }) {
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <img
-                          src={p.personId ? `https://cdn.nba.com/headshots/nba/latest/260x190/${p.personId}.png` : ''}
+                          src={getHeadshotUrl(league, p.personId) || ''}
                           alt=""
                           style={{ width: 28, height: 20, borderRadius: 3, objectFit: 'cover', background: 'var(--bg-surface)', display: p.personId ? 'block' : 'none' }}
                           onError={(e) => { e.target.style.display = 'none'; }}

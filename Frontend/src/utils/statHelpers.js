@@ -6,7 +6,7 @@ export function resolveStatValue(log, statKey) {
     points: 'points', pts: 'points',
     assists: 'assists', ast: 'assists',
     rebounds: 'rebounds', reb: 'rebounds',
-    threes: 'tpa', tpa: 'tpa',
+    threes: 'tpm', tpa: 'tpa', tpm: 'tpm',
   };
   if (statKey.includes('+')) {
     return statKey.split('+').reduce((sum, part) => {
@@ -24,7 +24,7 @@ export function mapStatType(displayType) {
     Points: 'points',
     Assists: 'assists',
     Rebounds: 'rebounds',
-    Threes: 'tpa',
+    Threes: 'tpm',
     'Pts+Ast': 'pts+ast',
     'Pts+Reb': 'pts+reb',
     'Reb+Ast': 'reb+ast',

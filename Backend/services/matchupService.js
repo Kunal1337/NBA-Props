@@ -24,13 +24,80 @@ function currentSeason() {
   return now.getMonth() >= 9 ? now.getFullYear() : now.getFullYear() - 1;
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
- * Build defensive rankings by fetching season averages and computing
- * how many points each team allows per position bucket.
- *
- * Because BallDontLie doesn't have a direct "defensive stats by position"
- * endpoint, we approximate by fetching all player stats for the season and
- * grouping by the opponent team and the player's position.
+ * BallDontLie's free tier caps at 5 requests/minute, so paginated calls
+ * (like fetching a full season of games) need to be spaced out and retry
+ * on 429 using the server's `retry-after` header.
+ */
+async function bdlGet(url, config, minGapMs = 13000) {
+  for (;;) {
+    try {
+      return await axios.get(url, config);
+    } catch (err) {
+      if (err.response?.status === 429) {
+        const retryAfterSec = Number(err.response.headers['retry-after']) || 15;
+        await sleep(retryAfterSec * 1000);
+        continue;
+      }
+      throw err;
+    } finally {
+      await sleep(minGapMs);
+    }
+  }
+}
+
+/**
+ * Fetch every game for a season (paginated), so we can derive real
+ * points-allowed from actual final scores. Throttled to stay under
+ * BallDontLie's free-tier rate limit (5 req/min).
+ */
+async function fetchSeasonGames(season, headers) {
+  const games = [];
+  let cursor;
+  do {
+    const { data } = await bdlGet(`${BDL_BASE}/games`, {
+      params: { seasons: [season], per_page: 100, cursor },
+      headers,
+    });
+    games.push(...(data.data || []));
+    cursor = data.meta?.next_cursor;
+  } while (cursor);
+  return games;
+}
+
+/**
+ * From raw games, compute each team's real average points allowed
+ * (i.e. the opposing team's score, averaged over completed games).
+ * Keyed by team id.
+ */
+function computePointsAllowed(games) {
+  const totals = {}; // teamId -> { sum, count }
+  for (const g of games) {
+    const home = g.home_team;
+    const away = g.visitor_team;
+    if (!home || !away) continue;
+    if (!g.home_team_score && !g.visitor_team_score) continue; // not yet played
+
+    if (!totals[home.id]) totals[home.id] = { sum: 0, count: 0 };
+    if (!totals[away.id]) totals[away.id] = { sum: 0, count: 0 };
+    totals[home.id].sum += g.visitor_team_score;
+    totals[home.id].count += 1;
+    totals[away.id].sum += g.home_team_score;
+    totals[away.id].count += 1;
+  }
+  const avgAllowed = {};
+  for (const [teamId, { sum, count }] of Object.entries(totals)) {
+    avgAllowed[teamId] = count > 0 ? sum / count : null;
+  }
+  return avgAllowed;
+}
+
+/**
+ * Build defensive rankings from each team's real points allowed, derived
+ * from actual game scores (BallDontLie has no direct "points allowed"
+ * endpoint, but /games gives final scores we can aggregate ourselves).
  *
  * This is expensive, so we cache aggressively and fall back to static
  * estimates if the API call fails or times out.
@@ -39,20 +106,15 @@ async function buildDefensiveRankings() {
   const headers = { Authorization: process.env.BALLDONTLIE_API_KEY };
   const season = currentSeason();
 
-  // Fetch season averages for all teams to estimate defensive vulnerability.
-  // We'll use team season averages as a proxy.
   let teams = [];
   try {
-    const { data } = await axios.get(`${BDL_BASE}/teams`, { headers });
+    const { data } = await bdlGet(`${BDL_BASE}/teams`, { headers });
     teams = (data.data || []).filter((t) => t.conference && t.division); // active NBA teams
   } catch (err) {
     console.error('Failed to fetch teams:', err.message);
     return null;
   }
 
-  // For each team, fetch their season stats to approximate points allowed.
-  // We'll use season_averages for a sample of players on opponent teams.
-  // Simpler approach: fetch team stats and rank by points allowed.
   const rankings = {};
 
   for (const team of teams) {
@@ -71,27 +133,18 @@ async function buildDefensiveRankings() {
     };
   }
 
-  // Fetch some aggregate stats to derive rankings
+  // Real points-allowed per team, derived from actual final scores.
   try {
-    // Get season averages per team by fetching overall team stats
-    for (const team of teams.slice(0, 30)) {
-      try {
-        const { data } = await axios.get(`${BDL_BASE}/season_averages`, {
-          params: { season, team_id: team.id },
-          headers,
-        });
-        const avgs = data.data || [];
-        if (avgs.length > 0) {
-          // Use the team's own scoring patterns as a proxy
-          const avg = avgs[0];
-          const ptsAllowed = avg.pts || 110;
-          rankings[team.full_name].overallRank = ptsAllowed;
-        }
-      } catch (_) {
-        // Skip — keep defaults
+    const games = await fetchSeasonGames(season, headers);
+    const ptsAllowedByTeam = computePointsAllowed(games);
+    for (const team of teams) {
+      const ptsAllowed = ptsAllowedByTeam[team.id];
+      if (ptsAllowed != null) {
+        rankings[team.full_name].overallRank = ptsAllowed;
       }
     }
-  } catch (_) {
+  } catch (err) {
+    console.error('Failed to fetch games for points-allowed calc:', err.message);
     // Keep defaults
   }
 

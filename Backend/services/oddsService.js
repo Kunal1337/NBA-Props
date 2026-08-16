@@ -1,11 +1,16 @@
 const axios = require('axios');
 
-const ODDS_BASE = 'https://api.the-odds-api.com/v4/sports/basketball_nba';
+const SPORT_KEYS = { nba: 'basketball_nba', wnba: 'basketball_wnba' };
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-let propsCache = { data: null, ts: 0 };
+const propsCache = { nba: { data: null, ts: 0 }, wnba: { data: null, ts: 0 } };
 
 const MARKETS = 'player_points,player_assists,player_rebounds,player_threes';
 const REGIONS = 'us';
+
+function oddsBase(league) {
+  const sportKey = SPORT_KEYS[league] || SPORT_KEYS.nba;
+  return `https://api.the-odds-api.com/v4/sports/${sportKey}`;
+}
 
 // Map The Odds API bookmaker keys to the shape the frontend expects.
 // The frontend was designed for sleeper/prizepicks/underdog, but those are
@@ -20,10 +25,10 @@ const BOOKMAKER_MAP = {
 };
 
 /**
- * Fetch the list of current NBA events (games).
+ * Fetch the list of current events (games) for a league.
  */
-async function fetchEvents() {
-  const { data } = await axios.get(`${ODDS_BASE}/events`, {
+async function fetchEvents(league) {
+  const { data } = await axios.get(`${oddsBase(league)}/events`, {
     params: { apiKey: process.env.ODDS_API_KEY },
   });
   return data; // array of event objects
@@ -32,8 +37,8 @@ async function fetchEvents() {
 /**
  * Fetch player-prop odds for a single event.
  */
-async function fetchEventOdds(eventId) {
-  const { data } = await axios.get(`${ODDS_BASE}/events/${eventId}/odds`, {
+async function fetchEventOdds(eventId, league) {
+  const { data } = await axios.get(`${oddsBase(league)}/events/${eventId}/odds`, {
     params: {
       apiKey: process.env.ODDS_API_KEY,
       regions: REGIONS,
@@ -86,22 +91,22 @@ function normalizeOutcomes(event, bookmaker, market) {
 }
 
 /**
- * Fetch all NBA player props across today's events.
+ * Fetch all player props across today's events for a league ('nba' | 'wnba').
  * Returns an array of prop objects the frontend can consume.
  */
-async function fetchAllProps() {
-  // Check cache
-  if (propsCache.data && Date.now() - propsCache.ts < CACHE_TTL) {
-    return propsCache.data;
+async function fetchAllProps(league = 'nba') {
+  const cache = propsCache[league] || propsCache.nba;
+  if (cache.data && Date.now() - cache.ts < CACHE_TTL) {
+    return cache.data;
   }
 
-  const events = await fetchEvents();
+  const events = await fetchEvents(league);
   const allProps = [];
 
   for (const event of events) {
     let eventOdds;
     try {
-      eventOdds = await fetchEventOdds(event.id);
+      eventOdds = await fetchEventOdds(event.id, league);
     } catch (err) {
       console.error(`Failed to fetch odds for event ${event.id}:`, err.message);
       continue;
@@ -139,7 +144,7 @@ async function fetchAllProps() {
   }
 
   const result = Object.values(grouped);
-  propsCache = { data: result, ts: Date.now() };
+  propsCache[league] = { data: result, ts: Date.now() };
   return result;
 }
 

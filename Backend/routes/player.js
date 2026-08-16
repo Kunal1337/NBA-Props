@@ -1,16 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const { getPlayerGameLogs } = require('../services/nbaService');
+const nbaService = require('../services/nbaService');
+const wnbaService = require('../services/wnbaService');
 
 /**
  * GET /api/player/:name
  * Returns game logs for the given player (up to 25 games).
- * Query params: ?statType=points&line=22.5 (optional, for insight generation)
+ * Query params: ?league=nba|wnba (default nba) &statType=points&line=22.5 (optional)
  */
 router.get('/player/:name', async (req, res) => {
   try {
+    const league = req.query.league === 'wnba' ? 'wnba' : 'nba';
+    const service = league === 'wnba' ? wnbaService : nbaService;
     const teamHint = req.query.team || null;
-    const logs = await getPlayerGameLogs(req.params.name, teamHint);
+    const logs = await service.getPlayerGameLogs(req.params.name, teamHint);
     if (logs.length === 0) {
       return res.status(404).json({ error: 'Player not found or no game logs' });
     }

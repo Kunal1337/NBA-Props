@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import api from '../api';
 import PerformanceChart from './PerformanceChart';
 import { resolveStatValue, mapStatType, generateInsights } from '../utils/statHelpers';
+import { getHeadshotUrl } from '../utils/headshot';
 
 const STAT_SELECTOR = [
   { label: 'Points', key: 'points' },
@@ -13,7 +14,7 @@ const STAT_SELECTOR = [
   { label: 'Reb+Ast', key: 'reb+ast' },
 ];
 
-export default function PlayerModal({ playerName, propData, onClose }) {
+export default function PlayerModal({ league, playerName, propData, onClose }) {
   const [gameLogs, setGameLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -31,7 +32,7 @@ export default function PlayerModal({ playerName, propData, onClose }) {
         const teamParam = propData?.playerTeam || propData?.homeTeam || '';
         const { data } = await api.get(
           `/api/player/${encodeURIComponent(playerName)}`,
-          { params: teamParam ? { team: teamParam } : {} },
+          { params: { league, ...(teamParam ? { team: teamParam } : {}) } },
         );
         if (!cancelled) setGameLogs(data.gameLogs || []);
       } catch (err) {
@@ -41,7 +42,7 @@ export default function PlayerModal({ playerName, propData, onClose }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [playerName]);
+  }, [playerName, league]);
 
   // Compute supporting stats
   const supportingStats = useMemo(() => {
@@ -81,7 +82,7 @@ export default function PlayerModal({ playerName, propData, onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {propData?.personId && (
               <img
-                src={`https://cdn.nba.com/headshots/nba/latest/260x190/${propData.personId}.png`}
+                src={getHeadshotUrl(league, propData.personId)}
                 alt=""
                 style={{ width: 48, height: 36, borderRadius: 6, objectFit: 'cover', background: 'var(--bg-surface)' }}
                 onError={(e) => { e.target.style.display = 'none'; }}

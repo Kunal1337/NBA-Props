@@ -1,18 +1,24 @@
 const { fetchAllProps } = require('./oddsService');
-const {
-  getPlayerGameLogs,
-  calculateHitRate,
-  calculateH2HHitRate,
-  getPersonId,
-} = require('./nbaService');
-const { getMatchupRating, getDefensiveRankings } = require('./matchupService');
+const nbaService = require('./nbaService');
+const wnbaService = require('./wnbaService');
+const matchupService = require('./matchupService');
+const wnbaMatchupService = require('./wnbaMatchupService');
 
-/* ---- In-memory cache ---- */
-let enrichedCache = null;   // array of enriched prop objects
-let refreshing = false;
+const LEAGUES = ['nba', 'wnba'];
 
-function getEnrichedProps() {
-  return enrichedCache;
+function statsServiceFor(league) {
+  return league === 'wnba' ? wnbaService : nbaService;
+}
+function matchupServiceFor(league) {
+  return league === 'wnba' ? wnbaMatchupService : matchupService;
+}
+
+/* ---- In-memory cache, per league ---- */
+const enrichedCache = { nba: null, wnba: null };
+const refreshing = { nba: false, wnba: false };
+
+function getEnrichedProps(league = 'nba') {
+  return enrichedCache[league] ?? enrichedCache.nba;
 }
 
 /* ---- Helpers (moved from routes/props.js) ---- */
@@ -21,7 +27,7 @@ const STAT_MAP = {
   Points: 'points',
   Assists: 'assists',
   Rebounds: 'rebounds',
-  Threes: 'tpa',
+  Threes: 'tpm',
   'Pts+Ast': 'pts+ast',
   'Pts+Reb': 'pts+reb',
   'Reb+Ast': 'reb+ast',
@@ -75,7 +81,10 @@ function separateOdds(odds) {
 
 /* ---- Enrich a single prop (with timeout) ---- */
 
-async function enrichProp(prop) {
+async function enrichProp(prop, league) {
+  const { getPlayerGameLogs, calculateHitRate, calculateH2HHitRate, getPersonId } = statsServiceFor(league);
+  const { getMatchupRating } = matchupServiceFor(league);
+
   let hitRates = { last5: null, last10: null, last20: null, season: null, h2h: null };
   let matchupRating = null;
   let opponentRankVsPosition = null;
@@ -129,50 +138,51 @@ async function enrichProp(prop) {
 
 /* ---- Full refresh (concurrency-limited) ---- */
 
-async function refreshEnrichedProps() {
-  if (refreshing) return;
-  refreshing = true;
-  console.log('[enrichment] Starting props refresh...');
+async function refreshEnrichedProps(league = 'nba') {
+  if (refreshing[league]) return;
+  refreshing[league] = true;
+  console.log(`[enrichment:${league}] Starting props refresh...`);
   const start = Date.now();
 
   try {
-    const rawProps = await fetchAllProps();
+    const rawProps = await fetchAllProps(league);
     const enriched = [];
     const BATCH = 5;
 
     for (let i = 0; i < rawProps.length; i += BATCH) {
       const batch = rawProps.slice(i, i + BATCH);
-      const results = await Promise.allSettled(batch.map(enrichProp));
+      const results = await Promise.allSettled(batch.map((p) => enrichProp(p, league)));
       for (const r of results) {
         if (r.status === 'fulfilled') enriched.push(r.value);
       }
     }
 
-    enrichedCache = enriched;
+    enrichedCache[league] = enriched;
     const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-    console.log(`[enrichment] Refresh complete: ${enriched.length} props in ${elapsed}s`);
+    console.log(`[enrichment:${league}] Refresh complete: ${enriched.length} props in ${elapsed}s`);
   } catch (err) {
-    console.error('[enrichment] Refresh failed:', err.message);
+    console.error(`[enrichment:${league}] Refresh failed:`, err.message);
   } finally {
-    refreshing = false;
+    refreshing[league] = false;
   }
 
-  return enrichedCache;
+  return enrichedCache[league];
 }
 
 /* ---- Pre-warm matchups cache ---- */
 
-async function refreshMatchups() {
-  console.log('[enrichment] Pre-warming matchups cache...');
+async function refreshMatchups(league = 'nba') {
+  console.log(`[enrichment:${league}] Pre-warming matchups cache...`);
   try {
-    await getDefensiveRankings();
-    console.log('[enrichment] Matchups cache ready');
+    await matchupServiceFor(league).getDefensiveRankings();
+    console.log(`[enrichment:${league}] Matchups cache ready`);
   } catch (err) {
-    console.error('[enrichment] Matchups pre-warm failed:', err.message);
+    console.error(`[enrichment:${league}] Matchups pre-warm failed:`, err.message);
   }
 }
 
 module.exports = {
+  LEAGUES,
   getEnrichedProps,
   refreshEnrichedProps,
   refreshMatchups,

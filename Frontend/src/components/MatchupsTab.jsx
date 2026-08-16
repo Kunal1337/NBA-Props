@@ -10,15 +10,17 @@ const RATING_COLORS = {
   unfavorable: '#f44336',
 };
 
-export default function MatchupsTab() {
+export default function MatchupsTab({ league }) {
   const [rankings, setRankings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    setLoading(true);
+    setError(null);
     (async () => {
       try {
-        const { data } = await api.get('/api/matchups');
+        const { data } = await api.get('/api/matchups', { params: { league } });
         setRankings(data);
       } catch (err) {
         setError('Failed to load matchup data.');
@@ -26,7 +28,7 @@ export default function MatchupsTab() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [league]);
 
   if (loading) return <p>Loading matchups…</p>;
   if (error) return <p style={{ color: '#f44336' }}>{error}</p>;
